@@ -88,6 +88,24 @@ const App: React.FC = () => {
     setAiInsight(null);
     setNearbyStops(null);
 
+    // GPS Warm-up: Initial request to wake up hardware
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setGpsStatus('active');
+        const firstPoint: RoutePoint = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          timestamp: position.timestamp,
+          speed: position.coords.speed || 0,
+          altitude: position.coords.altitude,
+        };
+        setRoute([firstPoint]);
+        lastPointRef.current = firstPoint;
+      },
+      (error) => console.log("Initial GPS lock failed, waiting for watchPosition..."),
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         setGpsStatus('active');
@@ -99,7 +117,11 @@ const App: React.FC = () => {
           altitude: position.coords.altitude,
         };
 
-        setRoute((prev) => [...prev, newPoint]);
+        setRoute((prev) => {
+          // Prevent duplicates from same timestamp
+          if (prev.length > 0 && prev[prev.length - 1].timestamp === newPoint.timestamp) return prev;
+          return [...prev, newPoint];
+        });
 
         if (lastPointRef.current) {
           const distance = calculateDistance(lastPointRef.current, newPoint);
@@ -133,7 +155,7 @@ const App: React.FC = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
+        timeout: 10000,
         maximumAge: 0
       }
     );
@@ -224,16 +246,16 @@ const App: React.FC = () => {
           {isRecording && (
             <>
               <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${gpsStatus === 'active' ? 'bg-emerald-500/10 border-emerald-500/20' :
-                  gpsStatus === 'searching' ? 'bg-yellow-500/10 border-yellow-500/20' :
-                    'bg-red-500/10 border-red-500/20'
+                gpsStatus === 'searching' ? 'bg-yellow-500/10 border-yellow-500/20' :
+                  'bg-red-500/10 border-red-500/20'
                 }`}>
                 <span className={`w-2 h-2 rounded-full ${gpsStatus === 'active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
-                    gpsStatus === 'searching' ? 'bg-yellow-500 animate-pulse' :
-                      'bg-red-500'
+                  gpsStatus === 'searching' ? 'bg-yellow-500 animate-pulse' :
+                    'bg-red-500'
                   }`}></span>
                 <span className={`text-[10px] font-bold uppercase tracking-tighter ${gpsStatus === 'active' ? 'text-emerald-500' :
-                    gpsStatus === 'searching' ? 'text-yellow-500' :
-                      'text-red-500'
+                  gpsStatus === 'searching' ? 'text-yellow-500' :
+                    'text-red-500'
                   }`}>
                   {gpsStatus === 'active' ? 'GPS Lock' :
                     gpsStatus === 'searching' ? 'Searching GPS' :
@@ -260,6 +282,19 @@ const App: React.FC = () => {
             <StatsCard label="Time" value={formatDuration(stats.duration)} icon={<Clock className="w-3 h-3" />} />
             <StatsCard label="Avg Spd" value={avgSpeedKmH} unit="km/h" icon={<Activity className="w-3 h-3" />} />
           </div>
+
+          {isRecording && gpsStatus === 'searching' && (
+            <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
+                <Navigation className="w-4 h-4 text-yellow-500 animate-pulse" />
+              </div>
+              <p className="text-xs text-yellow-200/80 leading-tight">
+                <span className="font-bold text-yellow-500 block mb-0.5 uppercase tracking-tighter">Waiting for Satellite Lock</span>
+                Please ensure you are outdoors with a clear view of the sky. Signal lock may take up to 60 seconds.
+              </p>
+            </div>
+          )}
+
           <RouteVisualizer route={route} />
         </div>
 
