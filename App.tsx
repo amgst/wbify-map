@@ -1,22 +1,22 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Bike, 
-  Play, 
-  Square, 
-  Map as MapIcon, 
-  Activity, 
-  Cpu, 
-  Navigation, 
-  Clock, 
-  ArrowUp, 
+import {
+  Bike,
+  Play,
+  Square,
+  Map as MapIcon,
+  Activity,
+  Cpu,
+  Navigation,
+  Clock,
+  ArrowUp,
   TrendingUp,
   Search,
   ChevronRight,
   RefreshCw,
   Award
 } from 'lucide-react';
-import { RoutePoint, RideStats, AIInsight, GroundingLink } from './types';
+import { RoutePoint, RideStats, AIInsight, GroundingLink, GPSStatus } from './types';
 import { calculateDistance, formatDuration } from './utils/geo';
 import StatsCard from './components/StatsCard';
 import RouteVisualizer from './components/RouteVisualizer';
@@ -24,6 +24,7 @@ import { getAIAnalysis, findNearbyStops } from './services/gemini';
 
 const App: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<GPSStatus>('inactive');
   const [route, setRoute] = useState<RoutePoint[]>([]);
   const [stats, setStats] = useState<RideStats>({
     totalDistance: 0,
@@ -34,7 +35,7 @@ const App: React.FC = () => {
     elevationGain: 0,
   });
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
-  const [nearbyStops, setNearbyStops] = useState<{text: string, links: GroundingLink[]} | null>(null);
+  const [nearbyStops, setNearbyStops] = useState<{ text: string, links: GroundingLink[] } | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isLoadingStops, setIsLoadingStops] = useState(false);
 
@@ -74,6 +75,7 @@ const App: React.FC = () => {
     await requestWakeLock();
 
     setIsRecording(true);
+    setGpsStatus('searching');
     setRoute([]);
     setStats({
       totalDistance: 0,
@@ -88,6 +90,7 @@ const App: React.FC = () => {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
+        setGpsStatus('active');
         const newPoint: RoutePoint = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
@@ -101,7 +104,7 @@ const App: React.FC = () => {
         if (lastPointRef.current) {
           const distance = calculateDistance(lastPointRef.current, newPoint);
           const elev = (newPoint.altitude || 0) - (lastPointRef.current.altitude || 0);
-          
+
           setStats((prev) => {
             const newDist = prev.totalDistance + distance;
             const newMaxSpd = Math.max(prev.maxSpeed, newPoint.speed);
@@ -116,8 +119,23 @@ const App: React.FC = () => {
         }
         lastPointRef.current = newPoint;
       },
-      (error) => console.error(error),
-      { enableHighAccuracy: true }
+      (error) => {
+        console.error("GPS Error:", error);
+        if (error.code === error.PERMISSION_DENIED) {
+          setGpsStatus('denied');
+          alert("GPS Permission denied. Please enable location services.");
+          stopRecording();
+        } else if (error.code === error.TIMEOUT) {
+          setGpsStatus('searching');
+        } else {
+          setGpsStatus('error');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
     );
 
     timerRef.current = window.setInterval(() => {
@@ -127,6 +145,7 @@ const App: React.FC = () => {
 
   const stopRecording = useCallback(() => {
     releaseWakeLock();
+    setGpsStatus('inactive');
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -203,10 +222,29 @@ const App: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
           {isRecording && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-              <span className="text-xs font-bold text-red-500 uppercase tracking-tighter">Live Recording</span>
-            </div>
+            <>
+              <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${gpsStatus === 'active' ? 'bg-emerald-500/10 border-emerald-500/20' :
+                  gpsStatus === 'searching' ? 'bg-yellow-500/10 border-yellow-500/20' :
+                    'bg-red-500/10 border-red-500/20'
+                }`}>
+                <span className={`w-2 h-2 rounded-full ${gpsStatus === 'active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
+                    gpsStatus === 'searching' ? 'bg-yellow-500 animate-pulse' :
+                      'bg-red-500'
+                  }`}></span>
+                <span className={`text-[10px] font-bold uppercase tracking-tighter ${gpsStatus === 'active' ? 'text-emerald-500' :
+                    gpsStatus === 'searching' ? 'text-yellow-500' :
+                      'text-red-500'
+                  }`}>
+                  {gpsStatus === 'active' ? 'GPS Lock' :
+                    gpsStatus === 'searching' ? 'Searching GPS' :
+                      gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                <span className="text-xs font-bold text-red-500 uppercase tracking-tighter">Live</span>
+              </div>
+            </>
           )}
           <button className="w-10 h-10 rounded-full glass flex items-center justify-center text-slate-400 hover:text-white transition-colors">
             <Activity className="w-5 h-5" />
@@ -230,22 +268,22 @@ const App: React.FC = () => {
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
               <Cpu className="w-4 h-4 text-neon" /> AI Assistant
             </h3>
-            
+
             {aiInsight ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <div className="p-3 bg-neon/10 rounded-xl border border-neon/20">
-                    <h4 className="text-lime-400 font-bold text-lg mb-1">{aiInsight.title}</h4>
-                    <p className="text-slate-300 text-xs leading-relaxed">{aiInsight.summary}</p>
+                  <h4 className="text-lime-400 font-bold text-lg mb-1">{aiInsight.title}</h4>
+                  <p className="text-slate-300 text-xs leading-relaxed">{aiInsight.summary}</p>
                 </div>
                 <div className="space-y-2">
-                    {aiInsight.recommendations.map((rec, i) => (
-                        <div key={i} className="flex gap-3 p-2 rounded-lg bg-slate-900/50 border border-slate-800">
-                            <div className="flex-shrink-0 w-5 h-5 bg-slate-800 rounded flex items-center justify-center text-[10px] font-bold text-neon">{i+1}</div>
-                            <p className="text-xs text-slate-400 leading-tight">{rec}</p>
-                        </div>
-                    ))}
+                  {aiInsight.recommendations.map((rec, i) => (
+                    <div key={i} className="flex gap-3 p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                      <div className="flex-shrink-0 w-5 h-5 bg-slate-800 rounded flex items-center justify-center text-[10px] font-bold text-neon">{i + 1}</div>
+                      <p className="text-xs text-slate-400 leading-tight">{rec}</p>
+                    </div>
+                  ))}
                 </div>
-                <button 
+                <button
                   onClick={handleGetAIAnalysis}
                   className="w-full py-3 rounded-xl glass border border-slate-700 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
                 >
@@ -255,10 +293,10 @@ const App: React.FC = () => {
             ) : (
               <div className="text-center py-8">
                 <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-800">
-                    <Award className="w-8 h-8 text-slate-700" />
+                  <Award className="w-8 h-8 text-slate-700" />
                 </div>
                 <p className="text-slate-500 text-xs px-4 mb-6">Complete your ride to generate a professional AI analysis of your performance.</p>
-                <button 
+                <button
                   disabled={isRecording || route.length < 5 || isLoadingAI}
                   onClick={handleGetAIAnalysis}
                   className="w-full py-4 rounded-2xl bg-white text-slate-950 font-bold text-sm hover:bg-neon transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -287,7 +325,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <button 
+              <button
                 onClick={handleFindNearby}
                 disabled={route.length === 0 || isLoadingStops}
                 className="w-full py-3 rounded-xl bg-slate-900 text-slate-300 text-xs font-bold border border-slate-800 hover:bg-slate-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -302,33 +340,33 @@ const App: React.FC = () => {
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md">
         <div className="glass p-4 rounded-full border border-white/10 shadow-2xl flex items-center gap-4 justify-between">
-            <div className="flex-1 flex flex-col pl-4">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Current Trip</span>
-                <span className="text-lg font-bold text-white tabular-nums">{formatDuration(stats.duration)}</span>
-            </div>
+          <div className="flex-1 flex flex-col pl-4">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Current Trip</span>
+            <span className="text-lg font-bold text-white tabular-nums">{formatDuration(stats.duration)}</span>
+          </div>
 
-            <div className="flex gap-2">
-                {!isRecording ? (
-                    <button 
-                        onClick={startRecording}
-                        className="w-14 h-14 rounded-full bg-neon flex items-center justify-center text-slate-950 shadow-[0_0_20px_rgba(132,204,22,0.4)] hover:scale-105 active:scale-95 transition-all"
-                    >
-                        <Play className="w-6 h-6 fill-current" />
-                    </button>
-                ) : (
-                    <button 
-                        onClick={stopRecording}
-                        className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 transition-all"
-                    >
-                        <Square className="w-6 h-6 fill-current" />
-                    </button>
-                )}
-            </div>
+          <div className="flex gap-2">
+            {!isRecording ? (
+              <button
+                onClick={startRecording}
+                className="w-14 h-14 rounded-full bg-neon flex items-center justify-center text-slate-950 shadow-[0_0_20px_rgba(132,204,22,0.4)] hover:scale-105 active:scale-95 transition-all"
+              >
+                <Play className="w-6 h-6 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={stopRecording}
+                className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 transition-all"
+              >
+                <Square className="w-6 h-6 fill-current" />
+              </button>
+            )}
+          </div>
 
-            <div className="flex-1 flex flex-col items-end pr-4">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Distance</span>
-                <span className="text-lg font-bold text-white tabular-nums">{(stats.totalDistance / 1000).toFixed(2)}<span className="text-xs text-slate-500 ml-1">km</span></span>
-            </div>
+          <div className="flex-1 flex flex-col items-end pr-4">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Distance</span>
+            <span className="text-lg font-bold text-white tabular-nums">{(stats.totalDistance / 1000).toFixed(2)}<span className="text-xs text-slate-500 ml-1">km</span></span>
+          </div>
         </div>
       </div>
     </div>

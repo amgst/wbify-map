@@ -26,3 +26,5 @@ export interface GroundingLink {
   title: string;
   uri: string;
 }
+
+export type GPSStatus = 'inactive' | 'searching' | 'active' | 'error' | 'denied';
