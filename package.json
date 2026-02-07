@@ -1,13 +1,28 @@
-
 {
   "name": "velo-ai",
   "version": "1.0.0",
   "private": true,
   "description": "Professional AI-powered cycling tracker",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "@google/genai": "^1.40.0",
     "lucide-react": "^0.563.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.7.3",
+    "vite": "^6.0.11"
   }
 }
