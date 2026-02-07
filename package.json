@@ -1,0 +1,13 @@
+
+{
+  "name": "velo-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Professional AI-powered cycling tracker",
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "@google/genai": "^1.40.0",
+    "lucide-react": "^0.563.0"
+  }
+}

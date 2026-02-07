@@ -1,0 +1,7 @@
+{
+  "name": "VeloAI - Intelligent Bike Computer",
+  "description": "A professional-grade cycling tracker with real-time AI performance analysis and route insights.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
